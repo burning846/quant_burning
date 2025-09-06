@@ -8,7 +8,7 @@ data:
   processed_dir: "./data/processed"
   
   # 默认数据源
-  default_source: "akshare"  # 可选: tushare, akshare, yahoo
+  default_source: "yahoo"  # 可选: tushare, akshare, yahoo
   
   # 数据时间范围
   default_start_date: "2018-01-01"
@@ -16,21 +16,21 @@ data:
   
   # 默认股票列表
   default_symbols:
-    - "000001.SZ"  # 平安银行
-    - "600000.SH"  # 浦发银行
-    - "600519.SH"  # 贵州茅台
-    - "000858.SZ"  # 五粮液
-    - "601318.SH"  # 中国平安
-    - "000063.SZ"  # 中兴通讯
-    - "002594.SZ"  # 比亚迪
-    - "600438.SH"  # 通威股份
-    - "603501.SH"  # 韦尔股份
-    - "300750.SZ"  # 宁德时代
+    - "AAPL"  # 苹果
+    - "MSFT"  # 微软
+    - "AMZN"  # 亚马逊
+    - "GOOGL"  # 谷歌
+    - "META"  # Meta(Facebook)
+    - "TSLA"  # 特斯拉
+    - "NVDA"  # 英伟达
+    - "JPM"   # 摩根大通
+    - "V"     # Visa
+    - "WMT"   # 沃尔玛
 
 # qlib配置
 qlib:
   provider_uri: "./data"
-  region: "cn"
+  region: "us"
   expression_cache: "./data/cache"
   calendar_cache: "./data/cache"
 

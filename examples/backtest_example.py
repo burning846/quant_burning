@@ -30,7 +30,7 @@ def run_backtest_example():
     
     # 获取数据
     print("\n1. 获取股票数据")
-    symbols = ['000001.SZ', '600000.SH', '600519.SH', '000858.SZ', '601318.SH', '000063.SZ', '002594.SZ', '600438.SH', '603501.SH', '300750.SZ']
+    symbols = ['AAPL', 'MSFT', 'AMZN', 'GOOGL', 'META', 'TSLA', 'NVDA', 'JPM', 'V', 'WMT']
     start_date = '2018-01-01'
     end_date = '2023-12-31'
     
@@ -42,7 +42,7 @@ def run_backtest_example():
         # 如果本地数据不存在，则从网络获取
         print("  本地数据不存在，从网络获取数据...")
         fetcher = DataFetcher()
-        data = fetcher.batch_fetch_stock_data(symbols, start_date, end_date, source='akshare')
+        data = fetcher.batch_fetch_stock_data(symbols, start_date, end_date, source='yahoo')
         data.to_csv('data/raw/stock_data.csv', index=False)
         print(f"  数据获取完成，共 {len(data)} 条记录")
     

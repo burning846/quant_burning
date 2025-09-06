@@ -6,7 +6,7 @@ import yaml
 import pandas as pd
 import numpy as np
 import qlib
-from qlib.config import REG_CN
+from qlib.config import REG_CN, REG_US
 from datetime import datetime
 
 # 导入项目模块
@@ -44,7 +44,7 @@ def init_qlib(config):
     
     # 设置默认配置
     provider_uri = qlib_config.get('provider_uri', 'data/qlib_data')
-    region = qlib_config.get('region', REG_CN)
+    region = qlib_config.get('region', REG_US)
     
     # 初始化qlib
     qlib.init(provider_uri=provider_uri, region=region)

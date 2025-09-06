@@ -128,6 +128,7 @@ class DataFetcher:
         elif code.endswith('.SH'):
             yf_code = code.replace('.SH', '.SS')
         else:
+            # 对于美股代码，直接使用原代码
             yf_code = code
             
         try:
