@@ -1,0 +1,120 @@
+# 量化交易系统配置文件
+
+# 数据配置
+data:
+  # 数据存储路径
+  data_dir: "./data"
+  raw_dir: "./data/raw"
+  processed_dir: "./data/processed"
+  
+  # 默认数据源
+  default_source: "yahoo"  # 可选: tushare, akshare, yahoo
+  
+  # 数据时间范围
+  default_start_date: "2018-01-01"
+  default_end_date: "2021-12-31"
+  
+  # 默认股票列表
+  default_symbols:
+    - "000001.SZ"  # 平安银行
+    - "600000.SH"  # 浦发银行
+    - "600519.SH"  # 贵州茅台
+    - "000858.SZ"  # 五粮液
+    - "601318.SH"  # 中国平安
+
+# qlib配置
+qlib:
+  provider_uri: "./data"
+  region: "cn"
+  expression_cache: "./data/cache"
+  calendar_cache: "./data/cache"
+
+# 模型配置
+models:
+  # 模型保存路径
+  model_dir: "./models/saved"
+  
+  # 默认机器学习模型
+  default_ml_model: "random_forest"  # 可选: random_forest, linear, xgboost, lightgbm
+  
+  # 默认深度学习模型
+  default_dl_model: "lstm"  # 可选: lstm, mlp
+  
+  # 模型超参数
+  hyperparams:
+    random_forest:
+      n_estimators: 100
+      max_depth: 10
+      min_samples_split: 2
+    xgboost:
+      n_estimators: 100
+      max_depth: 6
+      learning_rate: 0.1
+    lightgbm:
+      n_estimators: 100
+      num_leaves: 31
+      learning_rate: 0.1
+    lstm:
+      hidden_size: 64
+      num_layers: 2
+      dropout: 0.2
+      epochs: 50
+      batch_size: 64
+    mlp:
+      hidden_sizes: [64, 32]
+      dropout: 0.2
+      epochs: 50
+      batch_size: 64
+
+# 策略配置
+strategies:
+  # 动量策略
+  momentum:
+    lookback_period: 20
+    holding_period: 5
+  
+  # 均值回归策略
+  mean_reversion:
+    lookback_period: 10
+    threshold: 1.5
+  
+  # 移动平均线交叉策略
+  ma_cross:
+    short_window: 5
+    long_window: 20
+  
+  # RSI策略
+  rsi:
+    rsi_period: 14
+    overbought: 70
+    oversold: 30
+
+# 回测配置
+backtest:
+  # 回测结果保存路径
+  results_dir: "./results"
+  
+  # 默认回测参数
+  default_config:
+    start_date: "2019-01-01"
+    end_date: "2021-12-31"
+    benchmark: "000001.SZ"
+    account: 1000000
+    commission_rate: 0.0003
+    slippage_rate: 0.0001
+    trade_frequency: "day"
+    verbose: true
+
+# 可视化配置
+visualization:
+  # 图表样式
+  style: "seaborn-v0_8-darkgrid"
+  palette: "Set2"
+  
+  # 图表保存路径
+  plots_dir: "./results/plots"
+  
+  # 报告配置
+  report:
+    template_dir: "./templates"
+    output_dir: "./results/reports"

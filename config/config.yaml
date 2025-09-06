@@ -1,0 +1,29 @@
+# qlib全局配置
+
+provider_uri: "~/.qlib/qlib_data/cn_data"  # 数据存储路径
+region: cn  # 地区设置，cn表示中国市场
+
+# 数据提供者设置
+data_provider:
+  class: LocalProvider
+  kwargs:
+    data_dir: "~/.qlib/qlib_data/cn_data"
+
+# 回测设置
+backtest:
+  start_time: "2018-01-01"
+  end_time: "2021-12-31"
+  account: 100000000  # 初始资金
+  benchmark: "000300"  # 沪深300作为基准
+  exchange_kwargs:
+    limit_threshold: 0.095
+    deal_price: "close"
+    open_cost: 0.0005
+    close_cost: 0.0015
+    min_cost: 5
+
+# 执行设置
+execution:
+  verbose: True
+  time_per_step: "day"
+  generate_portfolio_metrics: True
