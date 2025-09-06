@@ -134,12 +134,136 @@ class Visualizer:
             plt.show()
         else:
             plt.close()
+            
+    def plot_returns_distribution(self, save_path=None, show=True):
+        """
+        绘制收益率分布图
+        
+        参数:
+            save_path: 保存路径，如果为None则不保存
+            show: 是否显示图表
+        """
+        if self.results is None:
+            raise ValueError("尚未加载回测结果")
+            
+        returns = self.results['returns']
+        
+        plt.figure(figsize=(12, 6))
+        plt.hist(returns, bins=50, alpha=0.75, color='blue')
+        plt.axvline(np.mean(returns), color='red', linestyle='dashed', linewidth=2, label=f'平均收益率: {np.mean(returns):.4f}')
+        plt.axvline(0, color='black', linestyle='solid', linewidth=1)
+        
+        plt.title('策略收益率分布')
+        plt.xlabel('收益率')
+        plt.ylabel('频率')
+        plt.legend()
+        plt.grid(True, alpha=0.3)
+        
+        if save_path is not None:
+            plt.savefig(save_path)
+            print(f"收益率分布图已保存至 {save_path}")
+        
+        if show:
+            plt.show()
+        else:
+            plt.close()
     
     def plot_drawdown(self, save_path=None, show=True):
         """
-        绘制回撤曲线
+        绘制回撤图
         
         参数:
+            save_path: 保存路径，如果为None则不保存
+            show: 是否显示图表
+        """
+        if self.results is None:
+            raise ValueError("尚未加载回测结果")
+            
+        equity_curve = self.results['equity_curve']
+        dates = self._convert_dates(self.results['dates'])
+        
+        # 计算回撤序列
+        running_max = np.maximum.accumulate(equity_curve)
+        drawdown = (equity_curve - running_max) / running_max * 100
+        
+        plt.figure(figsize=(12, 6))
+        plt.plot(dates, drawdown, color='red', linewidth=1.5)
+        plt.fill_between(dates, drawdown, 0, color='red', alpha=0.3)
+        
+        plt.title('策略回撤')
+        plt.xlabel('日期')
+        plt.ylabel('回撤 (%)')
+        plt.grid(True, alpha=0.3)
+        
+        # 格式化x轴日期
+        plt.gcf().autofmt_xdate()
+        date_format = mdates.DateFormatter('%Y-%m-%d')
+        plt.gca().xaxis.set_major_formatter(date_format)
+        
+        if save_path is not None:
+            plt.savefig(save_path)
+            print(f"回撤图已保存至 {save_path}")
+        
+        if show:
+            plt.show()
+        else:
+            plt.close()
+            
+     def plot_monthly_returns(self, save_path=None, show=True):
+        """
+        绘制月度收益热力图
+        
+        参数:
+            save_path: 保存路径，如果为None则不保存
+            show: 是否显示图表
+        """
+        if self.results is None:
+            raise ValueError("尚未加载回测结果")
+            
+        returns = self.results['returns']
+        dates = self._convert_dates(self.results['dates'])
+        
+        # 创建带日期的收益率Series
+        returns_series = pd.Series(returns, index=dates)
+        
+        # 计算月度收益率
+        monthly_returns = returns_series.resample('M').apply(lambda x: (1 + x).prod() - 1)
+        
+        # 创建月度收益率透视表
+        monthly_pivot = pd.pivot_table(
+            data=pd.DataFrame({
+                'year': monthly_returns.index.year,
+                'month': monthly_returns.index.month,
+                'return': monthly_returns.values
+            }),
+            values='return',
+            index='year',
+            columns='month'
+        )
+        
+        # 绘制热力图
+        plt.figure(figsize=(12, 8))
+        sns.heatmap(monthly_pivot, annot=True, fmt='.2%', cmap='RdYlGn', center=0, linewidths=1, cbar=True)
+        
+        plt.title('月度收益率热力图')
+        plt.xlabel('月份')
+        plt.ylabel('年份')
+        
+        if save_path is not None:
+            plt.savefig(save_path)
+            print(f"月度收益热力图已保存至 {save_path}")
+        
+        if show:
+            plt.show()
+        else:
+            plt.close()
+            
+     def plot_rolling_sharpe(self, window=60, save_path=None, show=True):
+        """
+        绘制滚动夏普比率
+        
+        参数:
+            window: 滚动窗口大小
             save_path: 保存路径
             show: 是否显示图表
         """
@@ -149,37 +273,33 @@ class Visualizer:
         # 创建图形
         plt.figure(figsize=(12, 6))
         
-        # 计算回撤
-        dates = self.results['dates']
-        portfolio_values = pd.Series(self.results['portfolio_value'], index=dates)
-        benchmark_values = pd.Series(self.results['benchmark_value'], index=dates)
+        # 计算滚动夏普比率
+        dates = self.results['dates'][1:]
+        returns = self.results['returns'][1:]
+        returns_series = pd.Series(returns, index=dates)
         
-        portfolio_running_max = portfolio_values.cummax()
-        portfolio_drawdown = (portfolio_values / portfolio_running_max) - 1
+        # 计算滚动夏普比率 (年化)
+        rolling_returns = returns_series.rolling(window=window)
+        rolling_mean = rolling_returns.mean() * 252
+        rolling_std = rolling_returns.std() * np.sqrt(252)
+        rolling_sharpe = rolling_mean / rolling_std
         
-        benchmark_running_max = benchmark_values.cummax()
-        benchmark_drawdown = (benchmark_values / benchmark_running_max) - 1
-        
-        # 绘制回撤
-        plt.fill_between(dates, 0, portfolio_drawdown, color='red', alpha=0.3, label='策略回撤')
-        plt.fill_between(dates, 0, benchmark_drawdown, color='blue', alpha=0.3, label='基准回撤')
-        plt.title('回撤分析')
-        plt.ylabel('回撤')
+        # 绘制滚动夏普比率
+        plt.plot(dates[window-1:], rolling_sharpe[window-1:], color='blue', linewidth=1.5)
+        plt.axhline(y=0, color='r', linestyle='--', alpha=0.3)
+        plt.title(f'滚动夏普比率 (窗口={window}天)')
+        plt.ylabel('夏普比率')
         plt.grid(True)
-        plt.legend()
         
         # 设置x轴日期格式
         plt.gca().xaxis.set_major_formatter(mdates.DateFormatter('%Y-%m'))
         plt.gca().xaxis.set_major_locator(mdates.MonthLocator(interval=3))
         plt.gcf().autofmt_xdate()
         
-        # 设置y轴百分比格式
-        plt.gca().yaxis.set_major_formatter(FuncFormatter(lambda y, _: '{:.0%}'.format(y)))
-        
         # 保存图形
         if save_path is not None:
             plt.savefig(save_path)
-            print(f"回撤曲线图已保存至 {save_path}")
+            print(f"滚动夏普比率图已保存至 {save_path}")
         
         # 显示图形
         if show:

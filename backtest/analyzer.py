@@ -70,7 +70,12 @@ class BacktestAnalyzer:
             'sharpe_ratio', 'benchmark_sharpe_ratio',
             'max_drawdown', 'information_ratio',
             'win_rate', 'sortino_ratio',
-            'beta', 'alpha'
+            'beta', 'alpha',
+            'calmar_ratio', 'omega_ratio',
+            'treynor_ratio', 'tail_ratio',
+            'value_at_risk', 'conditional_value_at_risk',
+            'max_drawdown_duration', 'skewness',
+            'kurtosis', 'capture_ratio'
         ]
         
         summary = {}

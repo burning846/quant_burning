@@ -216,8 +216,87 @@ class BacktestEngine:
         risk_metrics = self.calculate_risk_metrics(results['returns'], benchmark_returns)
         results.update(risk_metrics)
         
-        self.results = results
-        return results
+        # 计算额外的风险指标
+        # 卡玛比率 (Calmar Ratio) = 年化收益率 / 最大回撤
+        results['calmar_ratio'] = results['annual_return'] / abs(results['max_drawdown']) if results['max_drawdown'] != 0 else 0
+        
+        # 计算最大回撤持续时间
+        portfolio_values_series = pd.Series(results['portfolio_value'], index=results['dates'])
+        running_max = portfolio_values_series.cummax()
+        underwater = (portfolio_values_series < running_max)
+        if underwater.any():
+            underwater_periods = underwater.astype(int).groupby(underwater.astype(int).diff().ne(0).cumsum()).sum()
+            results['max_drawdown_duration'] = underwater_periods.max()
+        else:
+            results['max_drawdown_duration'] = 0
+        
+        # 计算偏度和峰度
+        returns_series = pd.Series(results['returns'])
+        results['skewness'] = returns_series.skew()
+        results['kurtosis'] = returns_series.kurtosis()
+        
+        # 计算捕获比率 (Capture Ratio)
+        up_market = np.where(benchmark_returns > 0, returns, 0)
+        down_market = np.where(benchmark_returns < 0, returns, 0)
+        up_benchmark = np.where(benchmark_returns > 0, benchmark_returns, 0)
+        down_benchmark = np.where(benchmark_returns < 0, benchmark_returns, 0)
+        
+        up_capture = np.mean(up_market) / np.mean(up_benchmark) if np.mean(up_benchmark) != 0 else 0
+        down_capture = np.mean(down_market) / np.mean(down_benchmark) if np.mean(down_benchmark) != 0 else 0
+        
+        results['up_capture_ratio'] = up_capture
+        results['down_capture_ratio'] = down_capture
+        
+        # 计算欧米茄比率 (Omega Ratio)
+        threshold = 0  # 阈值，可以根据需要调整
+        up_returns = returns[returns > threshold] - threshold
+        down_returns = threshold - returns[returns < threshold]
+        results['omega_ratio'] = np.sum(up_returns) / np.sum(down_returns) if np.sum(down_returns) != 0 else float('inf')
+        
+        # 计算特雷诺比率 (Treynor Ratio)
+        risk_free_rate = 0.03  # 与之前保持一致
+        results['treynor_ratio'] = (annual_return - risk_free_rate) / results['beta'] if results['beta'] != 0 else 0
+        
+        # 计算尾部比率 (Tail Ratio)
+        percentile = 5
+        upper_percentile = np.percentile(returns, 100 - percentile)
+        lower_percentile = np.percentile(returns, percentile)
+        results['tail_ratio'] = abs(upper_percentile / lower_percentile) if lower_percentile != 0 else float('inf')
+        
+        # 计算风险价值 (Value at Risk, VaR)
+        results['var_5'] = np.percentile(returns, percentile)
+        
+        # 计算条件风险价值 (Conditional Value at Risk, CVaR)
+         var = results['var_5']
+         results['cvar_5'] = np.mean(returns[returns <= var])
+         
+         # 计算卡玛比率 (Calmar Ratio)
+         results['calmar_ratio'] = annual_return / abs(results['max_drawdown']) if results['max_drawdown'] != 0 else 0
+         
+         # 计算最大回撤持续时间
+         running_max = np.maximum.accumulate(portfolio_values)
+         underwater = portfolio_values < running_max
+         if np.any(underwater):
+             underwater_periods = np.where(underwater)[0]
+             # 找出连续的水下期间
+             underwater_starts = np.where(np.diff(np.append(0, underwater.astype(int))) == 1)[0]
+             underwater_ends = np.where(np.diff(np.append(underwater.astype(int), 0)) == -1)[0]
+             if len(underwater_starts) > 0 and len(underwater_ends) > 0:
+                 durations = underwater_ends - underwater_starts
+                 results['max_drawdown_duration'] = np.max(durations)
+             else:
+                 results['max_drawdown_duration'] = 0
+         else:
+             results['max_drawdown_duration'] = 0
+         
+         # 计算偏度 (Skewness)
+         results['skewness'] = pd.Series(returns).skew()
+         
+         # 计算峰度 (Kurtosis)
+         results['kurtosis'] = pd.Series(returns).kurtosis()
+         
+         self.results = results
+         return results
     
     def calculate_risk_metrics(self, returns, benchmark_returns):
         """

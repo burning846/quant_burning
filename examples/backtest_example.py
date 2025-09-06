@@ -57,8 +57,8 @@ def run_backtest_example():
     print("\n3. 创建回测引擎")
     backtest_config = {
         'start_date': '2019-01-01',  # 回测开始日期
-        'end_date': '2021-12-31',  # 回测结束日期
-        'benchmark': '000001.SZ',  # 基准指数
+        'end_date': '2023-12-31',  # 回测结束日期
+        'benchmark': 'SPY',  # 基准指数（标普500ETF）
         'account': 1000000,  # 初始资金
         'commission_rate': 0.0003,  # 手续费率
         'slippage_rate': 0.0001,  # 滑点率

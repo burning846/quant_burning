@@ -2,7 +2,7 @@
 
 ## 项目简介
 
-这是一个基于Microsoft qlib框架构建的简单量化交易系统，提供了从数据获取、处理、模型训练到策略回测的完整流程。系统设计模块化，易于扩展和定制。
+这是一个基于Microsoft qlib框架构建的简单量化交易系统，提供了从数据获取、处理、模型训练到策略回测的完整流程。系统设计模块化，易于扩展和定制。现已支持中国A股和美股市场数据。
 
 ## 项目结构
 
@@ -45,7 +45,8 @@
 ## 功能特点
 
 1. **数据获取与处理**
-   - 支持从多种数据源获取股票数据（Tushare、AKShare、Yahoo Finance等）
+   - 支持从多种数据源获取股票数据（Yahoo Finance等）
+   - 支持中国A股和美股市场数据
    - 数据清洗、特征工程和标准化
    - 生成qlib格式数据集
 
@@ -67,13 +68,32 @@
    - 考虑交易成本和滑点
    - 详细的回测结果分析
 
-5. **结果分析与可视化**
+5. **性能评估**
+   - 年化收益率 (Annual Return)
+   - 夏普比率 (Sharpe Ratio)
+   - 最大回撤 (Maximum Drawdown)
+   - 贝塔系数 (Beta)
+   - 阿尔法 (Alpha)
+   - 信息比率 (Information Ratio)
+   - 索提诺比率 (Sortino Ratio)
+   - 卡玛比率 (Calmar Ratio)
+   - 欧米茄比率 (Omega Ratio)
+   - 特雷诺比率 (Treynor Ratio)
+   - 尾部比率 (Tail Ratio)
+   - 风险价值 (Value at Risk)
+   - 条件风险价值 (Conditional Value at Risk)
+   - 最大回撤持续时间 (Max Drawdown Duration)
+   - 偏度 (Skewness)
+   - 峰度 (Kurtosis)
+   - 捕获比率 (Capture Ratio)
+
+6. **结果分析与可视化**
    - 权益曲线
-   - 收益率分析
+   - 收益率分布图
    - 回撤分析
    - 月度收益热力图
-   - 滚动统计指标
-   - 风险指标计算
+   - 滚动夏普比率
+   - 多策略性能比较
 
 ## 安装与配置
 
@@ -99,7 +119,46 @@ pip install -r requirements.txt
 
 3. 配置系统
 
-编辑`config/config.yaml`文件，根据需要修改配置参数。
+编辑 `config.yaml` 文件，设置数据源和股票列表。可以选择中国A股市场(REG_CN)或美股市场(REG_US)。
+
+```yaml
+# 示例配置
+qlib:
+  provider_uri: "~/.qlib/qlib_data/cn_data"  # 或使用美股数据路径
+  region: REG_US  # 使用美股，改为REG_CN使用A股
+
+data_source: "yahoo"  # 数据源
+
+default_symbols:  # 默认股票列表
+  - AAPL
+  - MSFT
+  - AMZN
+  - GOOGL
+  - META
+```
+
+编辑`config.yaml`文件，根据需要修改配置参数。
+
+## 使用示例
+
+### 运行回测示例
+
+```bash
+python examples/backtest_example.py
+```
+
+### 运行可视化示例
+
+```bash
+python examples/visualization_example.py
+```
+
+### 自定义策略
+
+1. 在 `strategies` 目录下创建新的策略类，继承 `BaseStrategy`
+2. 实现 `generate_signals` 方法
+3. 在 `strategy_factory.py` 中注册新策略
+4. 在回测脚本中使用新策略
 
 ## 使用指南
 
