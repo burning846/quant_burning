@@ -26,8 +26,8 @@ class BacktestEngine:
         
         # 默认配置
         default_config = {
-            'start_date': '2018-01-01',  # 回测开始日期
-            'end_date': '2021-12-31',  # 回测结束日期
+            'start_date': '2019-01-01',  # 回测开始日期
+            'end_date': '2023-12-31',  # 回测结束日期
             'benchmark': '000300',  # 基准指数
             'account': 1000000,  # 初始资金
             'commission_rate': 0.0003,  # 手续费率

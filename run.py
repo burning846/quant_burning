@@ -61,11 +61,11 @@ def prepare_data(config):
         pandas.DataFrame: 处理后的数据
     """
     # 获取数据配置
-    data_config = config.get('data_provider', {})
-    symbols = data_config.get('symbols', ['000001.SZ', '600000.SH'])
-    start_date = data_config.get('start_date', '2018-01-01')
-    end_date = data_config.get('end_date', '2021-12-31')
-    data_source = data_config.get('source', 'yahoo')
+    data_config = config.get('data', {})
+    symbols = data_config.get('default_symbols', ['000001.SZ', '600000.SH'])
+    start_date = data_config.get('default_start_date', '2018-01-01')
+    end_date = data_config.get('default_end_date', '2023-12-31')
+    data_source = data_config.get('default_source', 'akshare')
     
     # 创建数据目录
     os.makedirs('data/raw', exist_ok=True)
