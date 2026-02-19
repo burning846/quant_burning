@@ -1,0 +1,50 @@
+# 全局配置 (美股)
+
+# Qlib配置
+qlib:
+  provider_uri: "data/qlib_data_us"
+  region: "us"
+
+# 数据配置
+data:
+  default_source: "yfinance"  # 使用yfinance获取美股数据
+  default_symbols: 
+    - "AAPL"   # Apple
+    - "MSFT"   # Microsoft
+    - "GOOGL"  # Alphabet
+    - "NVDA"   # Nvidia
+    - "TSLA"   # Tesla
+    - "AMZN"   # Amazon
+    - "META"   # Meta
+    - "SPY"    # S&P 500 ETF
+    - "QQQ"    # Nasdaq 100 ETF
+  default_start_date: "2020-01-01"
+  default_end_date: "2024-01-01"
+
+# 回测配置
+backtest:
+  strategy: "Momentum"  # 策略类型: Momentum, MeanReversion, MovingAverageCross, RSI
+  start_date: "2020-01-01"
+  end_date: "2024-01-01"
+  account: 100000  # 初始资金 (美元)
+  benchmark: "SPY"
+  commission_rate: 0.0005  # 美股佣金较低，设为万分之五
+  slippage_rate: 0.0002    # 滑点
+  trade_frequency: "day"
+  
+  # 策略参数
+  lookback_period: 20
+  holding_period: 10
+  short_window: 10
+  long_window: 50
+  threshold: 1.5
+  rsi_period: 14
+  overbought: 70
+  oversold: 30
+
+  # 风控参数 (新增)
+  risk_management:
+    stop_loss_pct: 0.07       # 个股止损: 7%
+    take_profit_pct: 0.20     # 个股止盈: 20%
+    trailing_stop_pct: 0.10   # 移动止盈: 回撤10%
+    max_drawdown_limit: 0.20  # 账户最大回撤限制: 20%

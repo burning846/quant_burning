@@ -1,29 +1,39 @@
-# qlib全局配置
+# 全局配置
 
-provider_uri: "~/.qlib/qlib_data/cn_data"  # 数据存储路径
-region: cn  # 地区设置，cn表示中国市场
+# Qlib配置
+qlib:
+  provider_uri: "data/qlib_data"
+  region: "us"
 
-# 数据提供者设置
-data_provider:
-  class: LocalProvider
-  kwargs:
-    data_dir: "~/.qlib/qlib_data/cn_data"
+# 数据配置
+data:
+  default_source: "akshare"
+  default_symbols: 
+    - "000001.SZ"
+    - "600000.SH"
+    - "000300.SH"
+  default_start_date: "2020-01-01"
+  default_end_date: "2023-12-31"
 
-# 回测设置
+# 回测配置
 backtest:
-  start_time: "2018-01-01"
-  end_time: "2021-12-31"
-  account: 100000000  # 初始资金
-  benchmark: "000300"  # 沪深300作为基准
-  exchange_kwargs:
-    limit_threshold: 0.095
-    deal_price: "close"
-    open_cost: 0.0005
-    close_cost: 0.0015
-    min_cost: 5
+  strategy: "Momentum"  # 策略类型: Momentum, MeanReversion, MovingAverageCross, RSI
+  start_date: "2020-01-01"
+  end_date: "2023-12-31"
+  account: 1000000
+  benchmark: "000300.SH"
+  commission_rate: 0.0003
+  slippage_rate: 0.0001
+  trade_frequency: "day"
+  
+  # 策略参数
+  lookback_period: 20
+  holding_period: 5
+  short_window: 5
+  long_window: 20
+  threshold: 1.5
+  rsi_period: 14
+  overbought: 70
+  oversold: 30
 
-# 执行设置
-execution:
-  verbose: True
-  time_per_step: "day"
-  generate_portfolio_metrics: True
+# 注意：模型配置已被移除，因为核心回测流程不使用它。

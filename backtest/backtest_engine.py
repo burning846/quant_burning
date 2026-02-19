@@ -34,7 +34,13 @@ class BacktestEngine:
             'slippage_rate': 0.0001,  # 滑点率
             'trade_frequency': 'day',  # 交易频率
             'rebalance_dates': None,  # 再平衡日期
-            'verbose': True  # 是否打印详细信息
+            'verbose': True,  # 是否打印详细信息
+            'risk_management': {  # 风控配置
+                'stop_loss_pct': 0.10,
+                'take_profit_pct': 0.20,
+                'trailing_stop_pct': 0.15,
+                'max_drawdown_limit': 0.25
+            }
         }
         
         # 更新配置
@@ -119,6 +125,9 @@ class BacktestEngine:
         # 重置策略状态
         strategy.reset()
         
+        # 重置风控状态
+        self.risk_manager.reset()
+        
         # 执行回测
         for i, date in enumerate(trade_dates):
             if verbose and i % 20 == 0:
@@ -126,12 +135,51 @@ class BacktestEngine:
             
             # 获取当前日期的市场数据
             current_data = data[data['date'] <= date].copy()
+            daily_data = data[data['date'] == date].set_index('stock_id')['close'].to_dict()
+            
+            # 1. 更新风控状态（账户价值）
+            is_liquidated = self.risk_manager.update_portfolio_value(portfolio_value)
+            
+            # 2. 检查风控平仓信号
+            risk_close_list, risk_reasons = self.risk_manager.check_positions(daily_data)
+            
+            if verbose and risk_close_list:
+                for stock in risk_close_list:
+                    print(f"[{date.strftime('%Y-%m-%d')}] 风控触发: {stock} - {risk_reasons[stock]}")
             
             # 生成交易信号
             signals = strategy.generate_signals(current_data)
             
             # 生成交易决策
             trade_decision = strategy.generate_trade_decision(signals)
+            
+            # 风控干预：强制修改交易决策
+            # 如果触发了账户级强平，清空所有目标权重
+            if is_liquidated:
+                if verbose:
+                    print(f"[{date.strftime('%Y-%m-%d')}] 账户级风控触发，强制清仓")
+                # 将所有当前持仓的目标权重设为0
+                liquidation_decision = []
+                for stock_id in positions.keys():
+                    liquidation_decision.append({'stock_id': stock_id, 'weight': 0.0})
+                trade_decision = pd.DataFrame(liquidation_decision)
+            
+            # 如果有个股风控触发，强制将其目标权重设为0
+            elif risk_close_list:
+                # 确保trade_decision包含这些股票的卖出指令
+                # 如果trade_decision里已经有这些股票，修改权重为0
+                # 如果没有，添加进去
+                
+                # 先把DataFrame转为字典方便操作
+                decision_dict = {}
+                if not trade_decision.empty:
+                    decision_dict = trade_decision.set_index('stock_id')['weight'].to_dict()
+                
+                for stock_id in risk_close_list:
+                    decision_dict[stock_id] = 0.0
+                
+                # 重建DataFrame
+                trade_decision = pd.DataFrame([{'stock_id': k, 'weight': v} for k, v in decision_dict.items()])
             
             # 更新策略持仓
             strategy.update_positions(trade_decision, date)
@@ -140,16 +188,27 @@ class BacktestEngine:
             trades = []
             new_positions = {}
             
-            for _, row in trade_decision.iterrows():
-                stock_id = row['stock_id']
-                target_weight = row['weight']
+            # 处理所有涉及的股票（包括持仓的和决策中的）
+            all_involved_stocks = set(positions.keys())
+            if not trade_decision.empty:
+                all_involved_stocks.update(trade_decision['stock_id'].tolist())
+            
+            # 将trade_decision转换为字典以便快速查找
+            target_weights = {}
+            if not trade_decision.empty:
+                target_weights = trade_decision.set_index('stock_id')['weight'].to_dict()
+            
+            for stock_id in all_involved_stocks:
+                target_weight = target_weights.get(stock_id, positions.get(stock_id, 0) * daily_data.get(stock_id, 0) / portfolio_value if portfolio_value > 0 else 0)
                 
                 # 获取股票价格
-                stock_data = data[(data['stock_id'] == stock_id) & (data['date'] <= date)]
-                if stock_data.empty:
+                if stock_id in daily_data:
+                    price = daily_data[stock_id]
+                else:
+                    # 如果当天没有数据，跳过交易，保持持仓
+                    if stock_id in positions:
+                        new_positions[stock_id] = positions[stock_id]
                     continue
-                
-                price = stock_data.iloc[-1]['close']
                 
                 # 计算目标持仓金额
                 target_value = portfolio_value * target_weight
@@ -160,7 +219,8 @@ class BacktestEngine:
                 # 计算交易金额
                 trade_value = target_value - current_value
                 
-                if abs(trade_value) > 0:
+                # 简单的阈值判断，避免微小交易
+                if abs(trade_value) > 100:  # 最小交易额
                     # 计算交易成本
                     commission = abs(trade_value) * commission_rate
                     slippage = abs(trade_value) * slippage_rate
@@ -182,9 +242,21 @@ class BacktestEngine:
                         'value': trade_value,
                         'cost': cost
                     })
+                    
+                    # 通知风控管理器
+                    if new_shares > 0: # 买入
+                        # 如果是新开仓或加仓，更新成本价（这里简化为最新买入价，也可以做加权平均）
+                        self.risk_manager.on_position_open(stock_id, price)
+                    elif new_positions[stock_id] <= 0: # 完全卖出
+                        self.risk_manager.on_position_close(stock_id)
+                        if stock_id in new_positions:
+                            del new_positions[stock_id]
+                            
                 elif stock_id in positions:
                     # 保持原有持仓
                     new_positions[stock_id] = positions[stock_id]
+            
+            # 更新持仓
             
             # 更新持仓
             positions = new_positions
@@ -216,87 +288,56 @@ class BacktestEngine:
         risk_metrics = self.calculate_risk_metrics(results['returns'], benchmark_returns)
         results.update(risk_metrics)
         
-        # 计算额外的风险指标
-        # 卡玛比率 (Calmar Ratio) = 年化收益率 / 最大回撤
-        results['calmar_ratio'] = results['annual_return'] / abs(results['max_drawdown']) if results['max_drawdown'] != 0 else 0
+        # 计算额外的风险指标（统一键名并修复未定义变量）
+        returns = np.array(results['returns'])
+        annual_return = results['annual_return']
+        # Calmar Ratio
+        results['calmar_ratio'] = annual_return / abs(results['max_drawdown']) if results['max_drawdown'] != 0 else 0
         
-        # 计算最大回撤持续时间
+        # 最大回撤持续时间（按净值序列计算）
         portfolio_values_series = pd.Series(results['portfolio_value'], index=results['dates'])
         running_max = portfolio_values_series.cummax()
-        underwater = (portfolio_values_series < running_max)
-        if underwater.any():
-            underwater_periods = underwater.astype(int).groupby(underwater.astype(int).diff().ne(0).cumsum()).sum()
-            results['max_drawdown_duration'] = underwater_periods.max()
+        drawdown_flag = (portfolio_values_series < running_max)
+        if drawdown_flag.any():
+            # 统计最长连续处于水下的区间长度
+            groups = drawdown_flag.astype(int).groupby(drawdown_flag.astype(int).diff().ne(0).cumsum()).sum()
+            results['max_drawdown_duration'] = int(groups.max())
         else:
             results['max_drawdown_duration'] = 0
         
-        # 计算偏度和峰度
-        returns_series = pd.Series(results['returns'])
-        results['skewness'] = returns_series.skew()
-        results['kurtosis'] = returns_series.kurtosis()
+        # 偏度与峰度
+        returns_series = pd.Series(returns)
+        results['skewness'] = float(returns_series.skew())
+        results['kurtosis'] = float(returns_series.kurtosis())
         
-        # 计算捕获比率 (Capture Ratio)
-        up_market = np.where(benchmark_returns > 0, returns, 0)
-        down_market = np.where(benchmark_returns < 0, returns, 0)
-        up_benchmark = np.where(benchmark_returns > 0, benchmark_returns, 0)
-        down_benchmark = np.where(benchmark_returns < 0, benchmark_returns, 0)
+        # 捕获比率（上行期间的策略/基准收益比）
+        up_mask = benchmark_returns > 0
+        up_capture = (returns[up_mask].mean() / benchmark_returns[up_mask].mean()) if benchmark_returns[up_mask].mean() != 0 else 0
+        results['capture_ratio'] = float(up_capture)
         
-        up_capture = np.mean(up_market) / np.mean(up_benchmark) if np.mean(up_benchmark) != 0 else 0
-        down_capture = np.mean(down_market) / np.mean(down_benchmark) if np.mean(down_benchmark) != 0 else 0
+        # 欧米茄比率 (Omega Ratio) - 阈值0
+        threshold = 0.0
+        up_part = returns[returns > threshold] - threshold
+        down_part = threshold - returns[returns < threshold]
+        results['omega_ratio'] = float(np.sum(up_part) / np.sum(down_part)) if np.sum(down_part) != 0 else float('inf')
         
-        results['up_capture_ratio'] = up_capture
-        results['down_capture_ratio'] = down_capture
+        # 特雷诺比率 (Treynor Ratio)
+        risk_free_rate = 0.03
+        results['treynor_ratio'] = float((annual_return - risk_free_rate) / results['beta']) if results['beta'] != 0 else 0
         
-        # 计算欧米茄比率 (Omega Ratio)
-        threshold = 0  # 阈值，可以根据需要调整
-        up_returns = returns[returns > threshold] - threshold
-        down_returns = threshold - returns[returns < threshold]
-        results['omega_ratio'] = np.sum(up_returns) / np.sum(down_returns) if np.sum(down_returns) != 0 else float('inf')
-        
-        # 计算特雷诺比率 (Treynor Ratio)
-        risk_free_rate = 0.03  # 与之前保持一致
-        results['treynor_ratio'] = (annual_return - risk_free_rate) / results['beta'] if results['beta'] != 0 else 0
-        
-        # 计算尾部比率 (Tail Ratio)
+        # 尾部比率 (Tail Ratio)
         percentile = 5
-        upper_percentile = np.percentile(returns, 100 - percentile)
-        lower_percentile = np.percentile(returns, percentile)
+        upper_percentile = float(np.percentile(returns, 100 - percentile))
+        lower_percentile = float(np.percentile(returns, percentile))
         results['tail_ratio'] = abs(upper_percentile / lower_percentile) if lower_percentile != 0 else float('inf')
         
-        # 计算风险价值 (Value at Risk, VaR)
-        results['var_5'] = np.percentile(returns, percentile)
+        # 风险价值 VaR/CVaR
+        var_5 = float(np.percentile(returns, percentile))
+        results['value_at_risk'] = var_5
+        results['conditional_value_at_risk'] = float(np.mean(returns[returns <= var_5])) if np.any(returns <= var_5) else 0
         
-        # 计算条件风险价值 (Conditional Value at Risk, CVaR)
-         var = results['var_5']
-         results['cvar_5'] = np.mean(returns[returns <= var])
-         
-         # 计算卡玛比率 (Calmar Ratio)
-         results['calmar_ratio'] = annual_return / abs(results['max_drawdown']) if results['max_drawdown'] != 0 else 0
-         
-         # 计算最大回撤持续时间
-         running_max = np.maximum.accumulate(portfolio_values)
-         underwater = portfolio_values < running_max
-         if np.any(underwater):
-             underwater_periods = np.where(underwater)[0]
-             # 找出连续的水下期间
-             underwater_starts = np.where(np.diff(np.append(0, underwater.astype(int))) == 1)[0]
-             underwater_ends = np.where(np.diff(np.append(underwater.astype(int), 0)) == -1)[0]
-             if len(underwater_starts) > 0 and len(underwater_ends) > 0:
-                 durations = underwater_ends - underwater_starts
-                 results['max_drawdown_duration'] = np.max(durations)
-             else:
-                 results['max_drawdown_duration'] = 0
-         else:
-             results['max_drawdown_duration'] = 0
-         
-         # 计算偏度 (Skewness)
-         results['skewness'] = pd.Series(returns).skew()
-         
-         # 计算峰度 (Kurtosis)
-         results['kurtosis'] = pd.Series(returns).kurtosis()
-         
-         self.results = results
-         return results
+        self.results = results
+        return results
     
     def calculate_risk_metrics(self, returns, benchmark_returns):
         """

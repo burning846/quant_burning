@@ -12,8 +12,6 @@ from datetime import datetime
 # 导入项目模块
 from data.fetcher import DataFetcher
 from data.processor import DataProcessor
-from models.ml_model import MLModel
-from models.dl_model import DLModel
 from strategies.simple_strategies import MomentumStrategy, MeanReversionStrategy, MovingAverageCrossStrategy, RSIStrategy
 from backtest.backtest_engine import BacktestEngine
 from backtest.analyzer import BacktestAnalyzer
@@ -96,70 +94,13 @@ def prepare_data(config):
     
     return processed_data
 
-def train_models(data, config):
-    """
-    训练模型
-    
-    参数:
-        data: 处理后的数据
-        config: 配置字典
-        
-    返回:
-        dict: 训练好的模型字典
-    """
-    # 获取模型配置
-    model_config = config.get('model', {})
-    model_type = model_config.get('type', 'ml')
-    model_name = model_config.get('name', 'random_forest')
-    
-    print("\n3. 训练模型")
-    
-    # 准备特征和标签
-    processor = DataProcessor()
-    features, labels = processor.prepare_features_and_labels(data)
-    
-    # 划分训练集和测试集
-    train_ratio = model_config.get('train_ratio', 0.8)
-    split_idx = int(len(features) * train_ratio)
-    
-    X_train, y_train = features[:split_idx], labels[:split_idx]
-    X_test, y_test = features[split_idx:], labels[split_idx:]
-    
-    # 创建并训练模型
-    if model_type.lower() == 'ml':
-        print(f"  训练机器学习模型: {model_name}")
-        model = MLModel(model_name=model_name)
-    elif model_type.lower() == 'dl':
-        print(f"  训练深度学习模型: {model_name}")
-        model = DLModel(model_name=model_name)
-    else:
-        raise ValueError(f"不支持的模型类型: {model_type}")
-    
-    # 训练模型
-    model.train(X_train, y_train)
-    
-    # 评估模型
-    metrics = model.evaluate(X_test, y_test)
-    print("  模型评估结果:")
-    for metric, value in metrics.items():
-        print(f"    {metric}: {value:.4f}")
-    
-    # 保存模型
-    model_path = f"models/saved/{model_type}_{model_name}.pkl"
-    os.makedirs(os.path.dirname(model_path), exist_ok=True)
-    model.save(model_path)
-    print(f"  模型已保存至: {model_path}")
-    
-    return model
-
-def run_backtest(data, config, model=None):
+def run_backtest(data, config):
     """
     运行回测
     
     参数:
         data: 处理后的数据
         config: 配置字典
-        model: 训练好的模型（可选）
         
     返回:
         dict: 回测结果
@@ -168,11 +109,11 @@ def run_backtest(data, config, model=None):
     backtest_config = config.get('backtest', {})
     strategy_name = backtest_config.get('strategy', 'MovingAverageCross')
     
-    print("\n4. 创建回测引擎")
+    print("\n3. 创建回测引擎")
     backtest_engine = BacktestEngine(backtest_config)
     
     # 创建策略
-    print("\n5. 创建策略")
+    print("\n4. 创建策略")
     if strategy_name == 'Momentum':
         lookback_period = backtest_config.get('lookback_period', 20)
         holding_period = backtest_config.get('holding_period', 5)
@@ -196,7 +137,7 @@ def run_backtest(data, config, model=None):
     print(f"  使用策略: {strategy.__class__.__name__}")
     
     # 运行回测
-    print("\n6. 运行回测")
+    print("\n5. 运行回测")
     results = backtest_engine.run_backtest(strategy, data)
     
     # 保存回测结果
@@ -206,7 +147,7 @@ def run_backtest(data, config, model=None):
     backtest_engine.save_results(result_path)
     
     # 分析回测结果
-    print("\n7. 分析回测结果")
+    print("\n6. 分析回测结果")
     analyzer = BacktestAnalyzer(results)
     
     # 打印摘要
@@ -215,7 +156,7 @@ def run_backtest(data, config, model=None):
     print(summary)
     
     # 生成报告
-    print("\n8. 生成回测报告")
+    print("\n7. 生成回测报告")
     report_dir = f"results/{strategy_name}_{timestamp}"
     analyzer.generate_report(output_dir=report_dir)
     
@@ -225,10 +166,14 @@ def main():
     """
     主函数
     """
+    parser = argparse.ArgumentParser(description='量化交易系统')
+    parser.add_argument('--config', type=str, default='config/config.yaml', help='配置文件路径')
+    args = parser.parse_args()
+
     print("=== 基于qlib的量化交易系统 ===")
     
     # 加载配置
-    config = load_config()
+    config = load_config(args.config)
     
     # 初始化qlib
     init_qlib(config)
@@ -236,14 +181,8 @@ def main():
     # 准备数据
     data = prepare_data(config)
     
-    # 训练模型（可选）
-    if config.get('train_model', False):
-        model = train_models(data, config)
-    else:
-        model = None
-    
     # 运行回测
-    results = run_backtest(data, config, model)
+    results = run_backtest(data, config)
     
     print("\n=== 量化交易系统运行完成 ===")
 

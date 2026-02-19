@@ -8,6 +8,7 @@ import matplotlib.dates as mdates
 from matplotlib.ticker import FuncFormatter
 import seaborn as sns
 from datetime import datetime
+from scipy import stats
 
 class BacktestAnalyzer:
     """

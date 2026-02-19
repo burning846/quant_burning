@@ -7,11 +7,6 @@ import akshare as ak
 import tushare as ts
 import yfinance as yf
 from datetime import datetime
-from qlib.data import D
-from qlib.utils import exists_qlib_data, init_instance_by_config
-from qlib.workflow import R
-from qlib.workflow.record_temp import SignalRecord, PortAnaRecord
-from qlib.utils import flatten_dict
 from tqdm import tqdm
 
 class DataFetcher:
@@ -37,14 +32,6 @@ class DataFetcher:
     def fetch_stock_daily_from_tushare(self, code, start_date, end_date):
         """
         从Tushare获取股票日线数据
-        
-        参数:
-            code: 股票代码，如'000001.SZ'
-            start_date: 开始日期，如'20180101'
-            end_date: 结束日期，如'20211231'
-            
-        返回:
-            pandas.DataFrame: 股票日线数据
         """
         if self.ts_pro is None:
             raise ValueError("Tushare API未初始化，请提供有效的token")
@@ -65,20 +52,11 @@ class DataFetcher:
             })
             # 转换日期格式
             df['date'] = pd.to_datetime(df['date'])
-            df.set_index('date', inplace=True)
         return df
     
     def fetch_stock_daily_from_akshare(self, code, start_date, end_date):
         """
         从AKShare获取股票日线数据
-        
-        参数:
-            code: 股票代码，如'000001'（不带交易所后缀）
-            start_date: 开始日期，如'20180101'
-            end_date: 结束日期，如'20211231'
-            
-        返回:
-            pandas.DataFrame: 股票日线数据
         """
         # AKShare的股票代码格式转换
         if code.endswith('.SZ'):
@@ -104,7 +82,6 @@ class DataFetcher:
                 })
                 # 转换日期格式
                 df['date'] = pd.to_datetime(df['date'])
-                df.set_index('date', inplace=True)
             return df
         except Exception as e:
             print(f"从AKShare获取数据失败: {e}")
@@ -113,14 +90,6 @@ class DataFetcher:
     def fetch_stock_daily_from_yfinance(self, code, start_date, end_date):
         """
         从Yahoo Finance获取股票日线数据
-        
-        参数:
-            code: 股票代码，如'000001.SS'（上交所）或'000001.SZ'（深交所）
-            start_date: 开始日期，如'2018-01-01'
-            end_date: 结束日期，如'2021-12-31'
-            
-        返回:
-            pandas.DataFrame: 股票日线数据
         """
         # 转换为Yahoo Finance格式的股票代码
         if code.endswith('.SZ'):
@@ -137,19 +106,53 @@ class DataFetcher:
             end = pd.to_datetime(end_date).strftime('%Y-%m-%d')
             
             # 使用yfinance获取数据
-            df = yf.download(yf_code, start=start, end=end)
+            try:
+                # 尝试使用新版参数 auto_adjust
+                df = yf.download(yf_code, start=start, end=end, progress=False, auto_adjust=True)
+            except TypeError:
+                # 兼容旧版本
+                print(f"Warning: yfinance version might be incompatible with auto_adjust, falling back to default.")
+                df = yf.download(yf_code, start=start, end=end, progress=False)
+                
             if df is not None and not df.empty:
+                # 如果是多级索引（yfinance >= 0.2.x 可能会返回多级索引），降级处理
+                if isinstance(df.columns, pd.MultiIndex):
+                    # 尝试找到 Close 列所在的层级
+                    try:
+                        # 这种情况下通常列是 (Price, Ticker)
+                        df.columns = df.columns.get_level_values(0)
+                    except:
+                        pass
+                    
                 # 重命名列以符合qlib格式
-                df = df.rename(columns={
-                    'Open': 'open',
-                    'High': 'high',
-                    'Low': 'low',
-                    'Close': 'close',
-                    'Volume': 'volume'
-                })
-                # 确保索引是日期类型
-                if not isinstance(df.index, pd.DatetimeIndex):
-                    df.index = pd.to_datetime(df.index)
+                # 转换为小写并映射
+                df.columns = [c.lower() for c in df.columns]
+                rename_map = {
+                    'open': 'open',
+                    'high': 'high',
+                    'low': 'low',
+                    'close': 'close',
+                    'volume': 'volume',
+                    'adj close': 'close' # 如果没有 auto_adjust，优先用 adj close
+                }
+                
+                # 如果存在 'adj close' 且我们想要复权数据，优先使用它作为 close
+                if 'adj close' in df.columns and 'close' in df.columns:
+                    # 如果刚才没用 auto_adjust，这里手动替换
+                    df['close'] = df['adj close']
+                    
+                df = df.rename(columns=rename_map)
+                
+                # 确保包含所需的列
+                required_cols = ['open', 'high', 'low', 'close', 'volume']
+                if not all(col in df.columns for col in required_cols):
+                    # 尝试根据现有列进行修复
+                    pass
+                # 将index转为column
+                df.reset_index(inplace=True)
+                df = df.rename(columns={'Date': 'date'})
+                # 确保日期类型
+                df['date'] = pd.to_datetime(df['date'])
             return df
         except Exception as e:
             print(f"从Yahoo Finance获取数据失败: {e}")
@@ -158,78 +161,20 @@ class DataFetcher:
     def save_data_to_csv(self, df, file_path):
         """
         将数据保存为CSV文件
-        
-        参数:
-            df: pandas.DataFrame, 要保存的数据
-            file_path: str, 保存路径
         """
         # 确保目录存在
         os.makedirs(os.path.dirname(file_path), exist_ok=True)
         # 保存数据
-        df.to_csv(file_path)
+        df.to_csv(file_path, index=False)
         print(f"数据已保存至 {file_path}")
-    
-    def fetch_and_save_stock_list(self, save_path='data/raw/stock_list.csv'):
-        """
-        获取并保存股票列表
-        
-        参数:
-            save_path: 保存路径
-            
-        返回:
-            pandas.DataFrame: 股票列表数据
-        """
-        if self.ts_pro is None:
-            raise ValueError("Tushare API未初始化，请提供有效的token")
-        
-        # 获取股票列表
-        stock_list = self.ts_pro.stock_basic(exchange='', list_status='L', 
-                                           fields='ts_code,symbol,name,area,industry,list_date')
-        
-        # 保存数据
-        self.save_data_to_csv(stock_list, save_path)
-        
-        return stock_list
-    
-    def fetch_and_save_index_data(self, index_code='000300.SH', start_date='20180101', 
-                                 end_date='20211231', save_path='data/raw/index_data.csv'):
-        """
-        获取并保存指数数据
-        
-        参数:
-            index_code: 指数代码，默认为沪深300
-            start_date: 开始日期
-            end_date: 结束日期
-            save_path: 保存路径
-            
-        返回:
-            pandas.DataFrame: 指数数据
-        """
-        if self.ts_pro is None:
-            raise ValueError("Tushare API未初始化，请提供有效的token")
-        
-        # 获取指数数据
-        index_data = self.ts_pro.index_daily(ts_code=index_code, start_date=start_date, end_date=end_date)
-        
-        # 保存数据
-        self.save_data_to_csv(index_data, save_path)
-        
-        return index_data
     
     def batch_fetch_stock_data(self, stock_list, start_date, end_date, source='tushare', 
                               save_dir='data/raw/stocks'):
         """
         批量获取股票数据
         
-        参数:
-            stock_list: 股票代码列表或DataFrame
-            start_date: 开始日期
-            end_date: 结束日期
-            source: 数据源，可选'tushare', 'akshare', 'yfinance'
-            save_dir: 保存目录
-            
         返回:
-            dict: 股票代码到数据的映射
+            pandas.DataFrame: 合并后的所有股票数据
         """
         # 确保目录存在
         os.makedirs(save_dir, exist_ok=True)
@@ -240,7 +185,7 @@ class DataFetcher:
         else:
             codes = stock_list
         
-        result = {}
+        all_data = []
         for code in tqdm(codes, desc=f"从{source}获取股票数据"):
             try:
                 # 根据数据源选择获取方法
@@ -254,12 +199,16 @@ class DataFetcher:
                     raise ValueError(f"不支持的数据源: {source}")
                 
                 if df is not None and not df.empty:
+                    df['stock_id'] = code
                     # 保存数据
                     file_name = f"{code.replace('.', '_')}.csv"
                     file_path = os.path.join(save_dir, file_name)
                     self.save_data_to_csv(df, file_path)
-                    result[code] = df
+                    all_data.append(df)
             except Exception as e:
                 print(f"获取{code}数据失败: {e}")
         
-        return result
+        if not all_data:
+            return pd.DataFrame()
+            
+        return pd.concat(all_data, ignore_index=True)
